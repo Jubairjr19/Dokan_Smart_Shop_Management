@@ -1,0 +1,230 @@
+@import '@fontsource-variable/manrope';
+
+/*
+ * Manrope has no Taka sign, and system fallbacks draw it small or not at all.
+ * This face is limited to that one character, so it renders the same on every machine.
+ */
+@font-face {
+  font-family: 'Dokan Taka';
+  src: url('@fontsource-variable/noto-sans-bengali/files/noto-sans-bengali-bengali-wght-normal.woff2') format('woff2');
+  unicode-range: U+09F3;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-cosmos-950 font-sans text-sm text-frost;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgba(34, 211, 238, 0.8);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: rgba(34, 211, 238, 0.32);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  }
+
+  /* The number spinners clash with the glass inputs */
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+  /* Native select menus open on a solid surface so options stay readable */
+  select option {
+    background: #0e1630;
+    color: #f1f5fb;
+  }
+}
+
+@layer components {
+  /*
+   * Liquid glass surface.
+   * The ::before layer draws a light-catching gradient edge rather than a flat
+   * border, and the top inset highlight reads as the lip of a glass slab.
+   */
+  .glass {
+    @apply relative rounded-2xl border border-white/10 bg-white/10 backdrop-blur-xl dark:bg-slate-900/40;
+    box-shadow:
+      0 24px 60px -28px rgba(2, 6, 23, 0.9),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .glass::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.06) 42%, rgba(255, 255, 255, 0.02) 62%, rgba(255, 255, 255, 0.16));
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+    pointer-events: none;
+  }
+
+  /* Coloured edge and pointer-tracked sheen for metric cards */
+  .glass-glow {
+    --glow: 34, 211, 238;
+    --mx: 50%;
+    --my: 0%;
+    @apply transition-[transform,box-shadow] duration-300;
+    box-shadow:
+      0 24px 60px -28px rgba(2, 6, 23, 0.9),
+      0 0 34px -14px rgba(var(--glow), 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .glass-glow::before {
+    background: linear-gradient(145deg, rgba(var(--glow), 0.75), rgba(255, 255, 255, 0.08) 45%, rgba(255, 255, 255, 0.02) 65%, rgba(var(--glow), 0.3));
+  }
+
+  .glass-glow::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(260px circle at var(--mx) var(--my), rgba(var(--glow), 0.16), transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+
+  .glass-glow:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 28px 60px -26px rgba(2, 6, 23, 0.95),
+      0 0 44px -10px rgba(var(--glow), 0.65),
+      inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+
+  .glass-glow:hover::after {
+    opacity: 1;
+  }
+
+  /* Form controls */
+  .field {
+    @apply h-11 w-full rounded-xl border border-white/15 bg-white/[0.06] px-3.5 text-sm text-frost outline-none transition duration-200 placeholder:text-frost-muted hover:border-white/25 focus:border-brand-cyan/70 focus:bg-white/[0.09] focus:ring-4 focus:ring-brand-cyan/15;
+  }
+
+  .field-error {
+    @apply border-brand-rose/70 focus:border-brand-rose/80 focus:ring-brand-rose/15;
+  }
+
+  .field-label {
+    @apply mb-1.5 block text-[13px] font-semibold text-frost-soft;
+  }
+
+  /* Tables */
+  .data-table {
+    @apply w-full border-collapse text-left;
+  }
+
+  .data-table th {
+    @apply whitespace-nowrap border-b border-white/10 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-frost-muted;
+  }
+
+  .data-table td {
+    @apply whitespace-nowrap border-b border-white/[0.06] px-5 py-3.5 text-[13.5px] text-frost-soft transition-colors duration-150;
+  }
+
+  .data-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .data-table tbody tr:hover td {
+    @apply bg-white/[0.04];
+  }
+
+  .data-table .num {
+    @apply text-right tabular-nums;
+  }
+
+  /* Compact interface option in Settings */
+  .compact .data-table td {
+    @apply py-2;
+  }
+  .compact .data-table th {
+    @apply py-2;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.1em] text-frost-muted;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Printing an invoice prints only the invoice, in black on white */
+@media print {
+  body {
+    background: #fff !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  /* Blur, transforms and scroll areas would otherwise trap and clip the invoice. */
+  [role='dialog'],
+  [role='dialog'] > div {
+    position: static !important;
+    max-height: none !important;
+    overflow: visible !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    transform: none !important;
+    animation: none !important;
+    background: none !important;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+  #invoice-print,
+  #invoice-print * {
+    visibility: visible;
+    color: #000 !important;
+    border-color: #bbb !important;
+  }
+  #invoice-print {
+    position: absolute;
+    inset: 0 0 auto;
+    padding: 24px;
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

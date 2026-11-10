@@ -1,0 +1,361 @@
+// Dokan data model.
+//
+// The nine entities from the SRS brief keep their exact column names. Anything
+// beyond them is marked "Added:" with the reason it is required.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+}
+
+enum ProductStatus {
+  IN_STOCK
+  LOW_STOCK
+  OUT_OF_STOCK
+}
+
+// Added CREDIT: a sale with nothing paid yet has no real payment channel.
+enum PaymentMethod {
+  BKASH
+  NAGAD
+  ROCKET
+  UPAY
+  BANGLA_QR
+  CARD
+  CASH
+  CREDIT
+}
+
+enum PurchaseStatus {
+  PAID
+  PENDING
+  PARTIAL
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  DEBT_PAYMENT
+  SUPPLIER_PAYMENT
+}
+
+// Added PAYMENT_RECEIVED: the Notifications screen in the UI design shows it.
+enum NotificationType {
+  LOW_STOCK
+  DEBT_DUE
+  SUPPLIER_DUE
+  REORDER
+  PAYMENT_RECEIVED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum CreditEntryType {
+  CREDIT
+  PAYMENT
+}
+
+model User {
+  id               String   @id @default(uuid())
+  name             String
+  email            String   @unique
+  password         String
+  role             Role     @default(ADMIN)
+  twoFactorEnabled Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  // Added: which shops or branches this user may access.
+  accounts Account[]
+}
+
+model Account {
+  id                String   @id @default(uuid())
+  shopName          String
+  ownerName         String
+  phone             String
+  businessCapital   Float    @default(685000.00)
+  lowStockThreshold Int      @default(5)
+  currency          String   @default("BDT")
+  createdAt         DateTime @default(now())
+
+  users         User[]
+  settings      Setting?
+  suppliers     Supplier[]
+  products      Product[]
+  customers     Customer[]
+  sales         Sale[]
+  purchases     Purchase[]
+  transactions  Transaction[]
+  notifications Notification[]
+  payments      Payment[]
+  smsMessages   SmsMessage[]
+}
+
+// Added: storage for GET/PUT /api/settings.
+model Setting {
+  id        String  @id @default(uuid())
+  accountId String  @unique
+  account   Account @relation(fields: [accountId], references: [id])
+
+  shopEmail   String @default("")
+  shopAddress String @default("")
+
+  smsEnabled      Boolean @default(true)
+  smsBeforeDue    Boolean @default(true)
+  smsOverdueDaily Boolean @default(true)
+  smsDaysBefore   Int     @default(3)
+  smsTemplate     String  @default("Dear {name}, your outstanding balance at {shop} is {amount}. Please pay by {date}. Thank you.")
+
+  lowStockAlerts   Boolean @default(true)
+  paymentReminders Boolean @default(true)
+  compact          Boolean @default(false)
+  paymentMethods   Json    @default("{}")
+
+  updatedAt DateTime @updatedAt
+}
+
+// Added: Product.supplierId and Purchase.supplierId both need a table to point at.
+model Supplier {
+  id        String   @id @default(uuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id])
+  name      String
+  contact   String   @default("")
+  phone     String   @default("")
+  createdAt DateTime @default(now())
+
+  products  Product[]
+  purchases Purchase[]
+
+  @@unique([accountId, name])
+}
+
+model Product {
+  id          String        @id @default(uuid())
+  productName String
+  category    String
+  stockQty    Int
+  buyingPrice Float
+  sellingPrice Float
+  supplierId  String
+  supplier    Supplier      @relation(fields: [supplierId], references: [id])
+  status      ProductStatus @default(IN_STOCK)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Added: tenant scope.
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  // Added: deleting a product must not erase it from past invoices.
+  deletedAt DateTime?
+
+  saleItems     SaleItem[]
+  purchaseItems PurchaseItem[]
+
+  @@index([accountId, status])
+  @@index([accountId, productName])
+  @@index([accountId, category])
+}
+
+model Sale {
+  id            String        @id @default(uuid())
+  saleNumber    String        @unique
+  customerId    String?
+  customer      Customer?     @relation(fields: [customerId], references: [id])
+  totalAmount   Float
+  paidAmount    Float
+  dueAmount     Float
+  paymentMethod PaymentMethod
+  createdAt     DateTime      @default(now())
+
+  // Added: tenant scope.
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  // Added: the POS screen applies a discount and prints it on the invoice.
+  discount Float @default(0)
+
+  items SaleItem[]
+
+  @@index([accountId, createdAt])
+  @@index([customerId, dueAmount])
+}
+
+model SaleItem {
+  id        String  @id @default(uuid())
+  saleId    String
+  sale      Sale    @relation(fields: [saleId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  unitPrice Float
+  subtotal  Float
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model Purchase {
+  id          String         @id @default(uuid())
+  poNumber    String         @unique
+  supplierId  String
+  supplier    Supplier       @relation(fields: [supplierId], references: [id])
+  itemsCount  Int
+  totalAmount Float
+  paidAmount  Float
+  dueAmount   Float
+  status      PurchaseStatus
+  createdAt   DateTime       @default(now())
+
+  // Added: tenant scope.
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  items PurchaseItem[]
+
+  @@index([accountId, createdAt])
+  @@index([supplierId])
+}
+
+// Added: without line items a purchase cannot know which stock to increase.
+model PurchaseItem {
+  id         String   @id @default(uuid())
+  purchaseId String
+  purchase   Purchase @relation(fields: [purchaseId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  quantity   Int
+  unitCost   Float
+  subtotal   Float
+
+  @@index([purchaseId])
+  @@index([productId])
+}
+
+model Customer {
+  id                 String    @id @default(uuid())
+  name               String
+  phone              String
+  totalCreditDue     Float     @default(0.00)
+  lastReminderSentAt DateTime?
+  createdAt          DateTime  @default(now())
+
+  // Added: tenant scope.
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  // Added: "overdue" and SMS reminders both need a due date.
+  dueDate DateTime?
+
+  sales       Sale[]
+  ledger      CreditEntry[]
+  payments    Payment[]
+  smsMessages SmsMessage[]
+
+  @@index([accountId, name])
+  @@index([accountId, totalCreditDue])
+}
+
+// Added: the SRS "Credit Records" entity, which the Credit page shows as a ledger.
+model CreditEntry {
+  id         String          @id @default(uuid())
+  customerId String
+  customer   Customer        @relation(fields: [customerId], references: [id])
+  type       CreditEntryType
+  amount     Float
+  note       String          @default("")
+  createdAt  DateTime        @default(now())
+
+  @@index([customerId, createdAt])
+}
+
+model Transaction {
+  id        String          @id @default(uuid())
+  type      TransactionType
+  amount    Float
+  category  String
+  accountId String
+  account   Account         @relation(fields: [accountId], references: [id])
+  notes     String?
+  createdAt DateTime        @default(now())
+
+  @@index([accountId, createdAt])
+  @@index([accountId, type])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  // Added: tenant scope.
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  // Added: which record raised the alert, so it can clear itself, and where the UI goes on click.
+  entityId String?
+  link     String?
+
+  @@index([accountId, isRead, createdAt])
+  @@index([accountId, type, entityId])
+}
+
+// Added: SRS FR-15 payment history, and idempotency for gateway webhooks.
+model Payment {
+  id            String        @id @default(uuid())
+  accountId     String
+  account       Account       @relation(fields: [accountId], references: [id])
+  customerId    String?
+  customer      Customer?     @relation(fields: [customerId], references: [id])
+  saleId        String?
+  method        PaymentMethod
+  gatewayTxnId  String?
+  amount        Float
+  appliedAmount Float         @default(0)
+  status        PaymentStatus
+  createdAt     DateTime      @default(now())
+
+  @@unique([method, gatewayTxnId])
+  @@index([accountId, createdAt])
+}
+
+// Added: the Credit page lists sent reminders with their delivery status.
+model SmsMessage {
+  id         String   @id @default(uuid())
+  accountId  String
+  account    Account  @relation(fields: [accountId], references: [id])
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  sid        String?
+  to         String
+  body       String
+  status     String
+  simulated  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([accountId, createdAt])
+}
+
+// Added: atomic source of invoice and purchase order numbers.
+model Sequence {
+  name  String @id
+  value Int
+}
